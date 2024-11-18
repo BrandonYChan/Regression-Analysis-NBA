@@ -1,0 +1,75 @@
+---
+title: "Regression Analysis on NBA Claims"
+author: "Brandon Chan"
+date: "2024-11-13"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) 
+```
+
+# Objective  
+Many older NBA fans like to make claims about how the league was different back in their day. Some common claims are "no-one play defense anymore" and "players only shoot threes nowadays". The aim of this analysis is to test and analyze some of these claims, as well as predict.   
+
+# Data Description 
+The data is from basketballreference.com. They offer CSV files that are free to download on their website. This particular dataset includes many common stats (ex. points, offensive rating), taken as the league average of per-game stats of teams for a given season. For example the PTS stat in the 2023-24 season represents that average points per game scored by a team in a single game.
+```{r}
+league_df <- read_csv("https://raw.githubusercontent.com/BrandonYChan/ballindata/refs/heads/master/static/CSV/League/per100_league.csv") 
+league_df 
+```
+```{r}
+# get_seasons <- function(start_ssn, end_ssn){ 
+  
+#   for(i in start_ssn:end_ssn){
+    
+#   }
+# }
+```
+
+# EDA 
+```{r}
+df_3s <- league_df %>% 
+  filter(!is.na(Pace), !is.na(`3P`), !is.na(`3P%`)) %>% 
+  select(Season,`3P`, `3P%`) 
+
+df_3s %>% 
+  ggplot(aes(Season, `3P`, group=1)) + 
+  geom_point() + 
+  geom_line() +
+  scale_x_discrete(breaks=c("1979-80", "1989-90", "1999-00", "2009-10", "2019-20")) + 
+  ggtitle("3-Pointers Made Per-Game Increases Almost Every Season") + 
+  labs(caption = "Distance decreased from 1994-1997")
+
+```
+## Hypothesis Test:
+H0: Mean # 3's in the 2020's = Mean # 3s in the 1990's    HA: Mean # 3's in the 2020's > Mean # 3s in the 1990's 
+```{r}
+# Group by decade 
+df_3s <- df_3s %>% 
+  mutate(Decade = paste(substr(Season, 6, 6), "0's", sep=""))
+
+# Get mean 3's for each decade 
+decade3s <- df_3s %>% 
+  group_by(Decade) %>% 
+  summarise(Mean3s = mean(`3P`)) %>% 
+  arrange(desc(Mean3s)) 
+decade3s 
+
+mean3s_2020s <- decade3s %>% 
+  filter(Decade=="20's") %>% 
+  select(Mean3s) %>% 
+  pull() 
+
+means3s_1990s <- decade3s %>% 
+  filter(Decade=="90's") %>% 
+  select(Mean3s) %>% 
+  pull() 
+
+mu <- mean(decade3s$Mean3s)
+sigma <- sd(decade3s$Mean3s)
+
+```
+
+
