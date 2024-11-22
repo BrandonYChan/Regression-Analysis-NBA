@@ -127,3 +127,5 @@ plot(league_df$BLK, league_df$X3PA)
 abline(lm(X3PA~BLK, league_df))
 ```
 
+Based on this output, the opposite appears to be true. As defence gets better 3 point appempts go down. This could also be that due to better defence, teams feel less safe taking deeper shots as well as open shots being much less frequent, fewer 3 point attempts are made.
+
