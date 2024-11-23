@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE} 
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 # install.packages("MASS") 
 # install.packages("leaps") 
 
@@ -17,7 +17,7 @@ select <- dplyr::select
 ```
 
 # Objective  
-Many older NBA fans like to make claims about how the league was different back in their day. They often criticize today's game and make claims such as 'players are too soft to play in the post and only shoot threes nowadays'. The aim of this analysis is to see how the game has changed, and why some of these changes have taken place.
+Many older NBA fans like to make claims about how the league was different back in their day. They often criticize today's game for the high frequency of threes attempted. The aim of this analysis is to see how the game has changed, and why these changes have taken place.
 # Data Description 
 The data is from basketballreference.com. They offer CSV files that are free to download on their website. This particular dataset includes many common stats (ex. points, offensive rating), taken as the league average of per-game stats of teams for a given season. For example the PTS stat in the 2023-24 season represents that average points per game scored by a team in a single game.
 ```{r}
@@ -26,62 +26,47 @@ league_df <- read_csv("https://raw.githubusercontent.com/BrandonYChan/ballindata
   select(-c(Rk, Lg))
 league_df
 ```
-
-The following is a breakdown of each category within the dataset.
-Rk (Rank): The sequential ranking of each season's data entry.
-Season: The specific NBA season (e.g., 2023-24).
-Lg (League): The basketball league, typically "NBA".
-Age: The average age of players in the league for that season.
-Ht (Height): The average height of players, typically represented in feet and inches.
-Wt (Weight): The average weight of players in pounds.
-G (Games): The total number of games played in the season.
-MP (Minutes Played): The average total minutes played per game by all teams combined.
-FG (Field Goals): The average number of field goals made per game.
-FGA (Field Goal Attempts): The average number of field goal attempts per game.
-X3P (3-Point Field Goals): The average number of 3-point field goals made per game.
-X3PA (3-Point Attempts): The average number of 3-point field goal attempts per game.
-FT (Free Throws): The average number of free throws made per game.
-FTA (Free Throw Attempts): The average number of free throw attempts per game.
-ORB (Offensive Rebounds): The average number of offensive rebounds per game.
-DRB (Defensive Rebounds): The average number of defensive rebounds per game.
-TRB (Total Rebounds): The average number of total rebounds (offensive + defensive) per game.
-AST (Assists): The average number of assists per game.
-STL (Steals): The average number of steals per game.
-BLK (Blocks): The average number of blocks per game.
-TOV (Turnovers): The average number of turnovers per game.
-PF (Personal Fouls): The average number of personal fouls per game.
-PTS (Points): The average total points scored per game.
-FG% (Field Goal Percentage): The shooting percentage for field goals (FG/FGA).
-X3P% (3-Point Percentage): The shooting percentage for 3-point field goals (3P/3PA).
-FT% (Free Throw Percentage): The shooting percentage for free throws (FT/FTA).
-Pace: The average number of possessions per 48 minutes, indicating the speed of play.
-eFG% (Effective Field Goal Percentage): A shooting metric that adjusts for the higher value of 3-point shots, calculated as (FG+0.5*P)/FGA
-TOV% (Turnover Percentage): The percentage of possessions ending in turnovers.
-ORB% (Offensive Rebound Percentage): The percentage of available offensive rebounds a team secures.
-FT/FGA (Free Throw Attempts Per Field Goal Attempt): The ratio of free throw attempts to field goal attempts.
-ORtg (Offensive Rating): The number of points scored per 100 possessions.
-TS% (True Shooting Percentage): A measure of shooting efficiency that considers field goals, 3-point field goals, and free throws, calculated as PTS/(2*(FGA+0.44*FTA))
+```{r}
+# The following is a breakdown of each category within the dataset.
+# Season: The specific NBA season (e.g., 2023-24).
+# Age: The average age of players in the league for that season.
+# Ht (Height): The average height of players, typically represented in feet and inches.
+# Wt (Weight): The average weight of players in pounds.
+# G (Games): The total number of games played in the season.
+# MP (Minutes Played): The average total minutes played per game by all teams combined.
+# FG (Field Goals): The average number of field goals made per game.
+# FGA (Field Goal Attempts): The average number of field goal attempts per game.
+# 3P (3-Point Field Goals): The average number of 3-point field goals made per game.
+# 3PA (3-Point Attempts): The average number of 3-point field goal attempts per game.
+# FT (Free Throws): The average number of free throws made per game.
+# FTA (Free Throw Attempts): The average number of free throw attempts per game.
+# ORB (Offensive Rebounds): The average number of offensive rebounds per game.
+# DRB (Defensive Rebounds): The average number of defensive rebounds per game.
+# TRB (Total Rebounds): The average number of total rebounds (offensive + defensive) per game.
+# AST (Assists): The average number of assists per game.
+# STL (Steals): The average number of steals per game.
+# BLK (Blocks): The average number of blocks per game.
+# TOV (Turnovers): The average number of turnovers per game.
+# PF (Personal Fouls): The average number of personal fouls per game.
+# PTS (Points): The average total points scored per game.
+# FG% (Field Goal Percentage): The shooting percentage for field goals (FG/FGA).
+# 3P% (3-Point Percentage): The shooting percentage for 3-point field goals (3P/3PA).
+# FT% (Free Throw Percentage): The shooting percentage for free throws (FT/FTA).
+# Pace: The average number of possessions per 48 minutes, indicating the speed of play.
+# eFG% (Effective Field Goal Percentage): A shooting metric that adjusts for the higher value of 3-point shots, calculated as (FG+0.5*P)/FGA
+# TOV% (Turnover Percentage): The percentage of possessions ending in turnovers.
+# ORB% (Offensive Rebound Percentage): The percentage of available offensive rebounds a team secures.
+# FT/FGA (Free Throw Attempts Per Field Goal Attempt): The ratio of free throw attempts to field goal attempts.
+# ORtg (Offensive Rating): The number of points scored per 100 possessions.
+# TS% (True Shooting Percentage): A measure of shooting efficiency that considers field goals, 3-point field goals, and free throws, calculated as PTS/(2*(FGA+0.44*FTA))
+```
 
 # EDA 
-We are going to start by evaluating the claim that players shoot more 3's in today's game than in past decades. This can be expressed more formally with a hypothesis test. 
+We are going to start by evaluating the claim that players shoot more threes in today's game than in past decades. This can be expressed more formally with a hypothesis test. 
 
 ## Hypothesis Test:
 Claim: Players shoot more threes in the current decade than in past decades. 
 We will take the mean number of threes attempted in the 2020's and compare it to the mean number of threes in the 1990's as estimates. 
-
-$$H_0$$: Mean # 3's in the 2020's ($$M_{2020s}$$) = Mean # 3s in the 1990's ($$M_{1990s}$$)
-$$H_A$$: Mean # 3's in the 2020's > Mean # 3s in the 1990's 
-
-$$t_{obs} = \frac{((M_{2020s} - M_{1990s})-0)}{\sqrt{\frac{\sigma_1^2}{n} + \frac{\sigma_2^2}{m}}}$$ 
-$$t_{obs} = \frac{12.56 - 4.25}{\sqrt{\frac{0.3361547^2}{5} + \frac{1.726429^2}{10}}}$$ 
-
-At 95% significance: $$t_{0.025, 4} = 2.131847$$
-$$ t_{obs} > t_{\alpha, n-1} $$
-So we reject the null hypothesis: Players do shoot more threes in the current decade than in the past. 
-
-Where did you get these numbers from? Maybe see if you can code it?
-
-
 ```{r}
 # Group by decade 
 df_3s <- league_df %>% 
@@ -106,6 +91,7 @@ means3s_1990s <- decade3s %>%
 
 mu <- mean(decade3s$Mean3s)
 
+# Parameters for hypothesis test 
 sigma_1 <- df_3s %>% 
   filter(Decade=="20's") %>% 
   summarise(sd(`3PA`)) %>% 
@@ -128,12 +114,22 @@ m <- df_3s %>%
   count() %>% 
   pull() 
 
+# Observed test statistic 
 t_obs <- ((mean3s_2020s - means3s_1990s)-0)/sqrt(sigma_1^2/n + sigma_2^2/m) 
-t_obs 
 
 # Evaluated at 95% significance 
-# qt(0.05, n-1, lower.tail = FALSE)
+t_alpha <- qt(0.05, n-1, lower.tail = FALSE)
 ```
+$$H_0$$: Mean # 3's in the 2020's ($$M_{2020s}$$) = Mean # 3s in the 1990's ($$M_{1990s}$$)
+$$H_A$$: Mean # 3's in the 2020's > Mean # 3s in the 1990's 
+
+$$t_{obs} = \frac{((M_{2020s} - M_{1990s})-0)}{\sqrt{\frac{\sigma_1^2}{n} + \frac{\sigma_2^2}{m}}}$$ 
+$$t_{obs} = \frac{12.56 - 4.25}{\sqrt{\frac{0.3361547^2}{5} + \frac{1.726429^2}{10}}}$$ 
+
+At 95% significance: $$t_{0.025, 4} = 2.131847$$
+$$ t_{obs} > t_{\alpha, n-1} $$
+So we reject the null hypothesis: Players do shoot more threes in the current decade than in the past. 
+
 
 ## Plotting Changes in 3-Pointers Made  
 The evidence strongly suggests that players take more 3s than in the past. We verify this with a visualization: 
@@ -153,36 +149,46 @@ df_3s %>%
 ```
 It is clear that players take more threes in almost every passing season since the addition of the three point line to the NBA game in 1979. This leads to the question; why are players taking more threes?
 
-## Stat Selection to Predict Threes Made 
+## Stat Selection to Predict Threes Attempted  
 ```{r}
+# Remove variables with direct linear dependencies 
 df_pred3 <- league_df %>% 
-  select(-c(Season, Ht, `3P`, `3P%`, FG, FGA, `FG%`, `FT/FGA`, `eFG%` ))
-df_pred3 
-# Maybe add reasons why you chose each of these variables
-# result.null <- lm(`3PA` ~ 1, df_pred3)
-# result.full <- lm(`3PA` ~ ., df_pred3)
-# step(result.null, scope=list(upper=result.full), data=df_pred3, direction="both")
-
+  select(-c(Season, Ht, `3P`, `3P%`, FG, FGA, `FG%`, `FT/FGA`, `eFG%`, `TS%`)) 
 
 best_subsets_3s <- regsubsets(`3PA`~., df_pred3, method="backward")   
-best_summary_3s <- summary(best_subsets) 
+best_summary_3s <- summary(best_subsets_3s) 
 
-plot(best_summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "b")
+plot(best_summary_3s$bic, xlab = "Number of Variables", ylab = "BIC", type = "b") 
+```
 
-coef(best_subsets_3s, 9)
+## Selecting the Best 5 Variables 
+```{r}
+best_coefs <- coef(best_subsets_3s, 5) 
+coef_names <- names(best_coefs) 
+coef_names 
 ```
 ## Creating the Model 
 ```{r}
-model_3s <- lm(`3PA` ~ FT+FTA+DRB+AST+STL+TOV+PTS+`ORB%`+ORtg , df_pred3) 
-summary(model_3s) 
+model_3s <- lm(`3PA` ~ TRB+STL+TOV+PTS+`ORB%` , df_pred3) 
+fit_3PA <-fitted(model_3s)
+
+## Will fix titles later 
+plot(seq(length(df_3s$Season)), df_3s$`3PA`) 
+lines(seq(length(df_3s$Season)), fit_3PA)
 ```
 
-## 3 point attempts vs defensive stats
-Regress defensive stats against 3 point attempts to see if better defense leads to more 3 point attempts
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------
+## 3 Point Attempts Versus Defensive Stats
+Based on the stats Regress defensive stats against 3 point attempts to see if better defense leads to more 3 point attempts
 
 ```{r}
 lm_defence <- lm(`3PA`~STL+TOV+BLK+DRB, league_df)
-summary(lm_3s)
+summary(model_3s)
 ```
 
 ```{r}
