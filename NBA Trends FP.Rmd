@@ -183,8 +183,9 @@ lines(seq(length(df_3s$Season)), fit_3PA)
 
 
 ----------------------------------------------------------------------------------------------------------------------------------------
-## 3 Point Attempts Versus Defensive Stats
-Based on the stats Regress defensive stats against 3 point attempts to see if better defense leads to more 3 point attempts
+## Why are there more 3 point shots attempted?
+Is the reason teams are taking more 3 point attempts because teams are defending better making driving tothe rim and scoring even harder as the league progresses? 
+In order to determine if this is true we'll regress various common defensive stats taken league-wide to see if better defence leads to more 3 point attemots taken.
 
 ```{r}
 lm_defence <- lm(`3PA`~STL+TOV+BLK+DRB, league_df)
