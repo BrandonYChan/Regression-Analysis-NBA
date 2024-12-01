@@ -2,30 +2,51 @@
 title: "Regression Analysis on NBA Claims"
 author: "Brandon Chan, Brayden Van De Wynckel"
 date: "2024-11-13"
-output: html_document
+output:
+  html_document: 
+    df_print: kable 
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE} 
 knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(tibble.print_min = 4, tibble.print_max = 10)
 # install.packages("MASS") 
 # install.packages("leaps") 
-
+# install.packages("DT") 
+# install.packages("pander") 
 library(MASS)
 library(tidyverse)
 library(leaps) 
+library(knitr) 
+library(pander) 
+library(DT)
 select <- dplyr::select 
 ```
 
-# Objective  
-Many older NBA fans like to make claims about how the league was different back in their day. They often criticize today's game for the high frequency of threes attempted. The aim of this analysis is to see how the game has changed, and why these changes have taken place.
-# Data Description 
-The data is from basketballreference.com. They offer CSV files that are free to download on their website. This particular dataset includes many common stats (ex. points, offensive rating), taken as the league average of per-game stats of teams for a given season. For example the PTS stat in the 2023-24 season represents that average points per game scored by a team in a single game.
+# Index 
 ```{r}
-league_df <- read_csv("https://raw.githubusercontent.com/BrandonYChan/ballindata/refs/heads/master/static/CSV/League/per100_league.csv") %>%
+index <- tibble(
+  Order = c("1. ", "2. ", "3. ", "4. ", "5. ", "6. "),
+  Item = c("Objectives", "Hypothesis Test", "Stat Selection", "Model Testing", "Impact of Defense", "Conclusions") 
+)
+index 
+```
+
+
+
+# Objective  
+Many older NBA fans like to make claims about how the league was different back in their day. They often criticize today's game for the high frequency of threes attempted. Many speculate why this is the case, but clear explanations are not often provided. The aim of this analysis is to see how the number of threes attempted has changed over the years, and why these changes have taken place.  
+
+## Data Description 
+The data is from basketballreference.com and includes all seasons in NBA history. This particular dataset includes many common stats (ex. points, offensive rating), taken as the league average of per-game stats of <b>teams</b> for a given season. For example the PTS stat in the 2023-24 season represents that average points per game scored by a team in a single game.
+```{r}
+league_df <- read_csv("https://raw.githubusercontent.com/BrandonYChan/ballindata/refs/heads/master/static/CSV/League/per100_league.csv", show_col_types = FALSE) %>%
   filter(Season >= "1950-51") %>% 
   select(-c(Rk, Lg))
-league_df
+datatable(league_df, options=list(autoWidth=TRUE), width="80%")  
 ```
+
 ```{r}
 # The following is a breakdown of each category within the dataset.
 # Season: The specific NBA season (e.g., 2023-24).
@@ -61,10 +82,10 @@ league_df
 # TS% (True Shooting Percentage): A measure of shooting efficiency that considers field goals, 3-point field goals, and free throws, calculated as PTS/(2*(FGA+0.44*FTA))
 ```
 
-# EDA 
+## Testing the Claim that Players Attempts More Threes
+
 We are going to start by evaluating the claim that players shoot more threes in today's game than in past decades. This can be expressed more formally with a hypothesis test. 
 
-## Hypothesis Test:
 Claim: Players shoot more threes in the current decade than in past decades. 
 We will take the mean number of threes attempted in the 2020's and compare it to the mean number of threes in the 1990's as estimates. 
 ```{r}
@@ -75,6 +96,7 @@ df_3s <- league_df %>%
 # Get mean 3's for each decade 
 decade3s <- df_3s %>% 
   group_by(Decade) %>% 
+  filter(!(Decade %in% c("50's", "60's", "70's"))) %>% 
   summarise(Mean3s = mean(`3PA`)) %>% 
   arrange(desc(Mean3s)) 
 decade3s 
@@ -120,13 +142,14 @@ t_obs <- ((mean3s_2020s - means3s_1990s)-0)/sqrt(sigma_1^2/n + sigma_2^2/m)
 # Evaluated at 95% significance 
 t_alpha <- qt(0.05, n-1, lower.tail = FALSE)
 ```
-$$H_0$$: Mean # 3's in the 2020's ($$M_{2020s}$$) = Mean # 3s in the 1990's ($$M_{1990s}$$)
-$$H_A$$: Mean # 3's in the 2020's > Mean # 3s in the 1990's 
+$H_0$: Mean # 3's in the 2020's ($M_{2020s}$) = Mean # 3s in the 1990's ($M_{1990s}$)
 
-$$t_{obs} = \frac{((M_{2020s} - M_{1990s})-0)}{\sqrt{\frac{\sigma_1^2}{n} + \frac{\sigma_2^2}{m}}}$$ 
+$H_A$: Mean # 3's in the 2020's > Mean # 3s in the 1990's 
+
+$$t_{obs} = \frac{((M_{2020s} - M_{1990s})-0)}{\sqrt{\frac{\sigma_1^2}{n} + \frac{\sigma_2^2}{m}}}$$  
 $$t_{obs} = \frac{12.56 - 4.25}{\sqrt{\frac{0.3361547^2}{5} + \frac{1.726429^2}{10}}}$$ 
 
-At 95% significance: $$t_{0.025, 4} = 2.131847$$
+At 95% significance: $t_{0.025, 4} = 2.131847$
 $$ t_{obs} > t_{\alpha, n-1} $$
 So we reject the null hypothesis: Players do shoot more threes in the current decade than in the past. 
 
@@ -147,44 +170,89 @@ df_3s %>%
   labs(caption = "3-pt line distance decreased from 1994 to 1997")
 
 ```
+
 It is clear that players take more threes in almost every passing season since the addition of the three point line to the NBA game in 1979. This leads to the question; why are players taking more threes?
 
 ## Stat Selection to Predict Threes Attempted  
+
+The following variables/stats will be removed due to linear dependencies or irrelevance to the analysis: Season, Ht, 3P, 3P%, FG, FGA, FG%, FT/FGA, eFG%, TS%. 
 ```{r}
 # Remove variables with direct linear dependencies 
 df_pred3 <- league_df %>% 
-  select(-c(Season, Ht, `3P`, `3P%`, FG, FGA, `FG%`, `FT/FGA`, `eFG%`, `TS%`)) 
+  select(-c(Season, Ht, `3P`, `3P%`, FG, FGA, `FG%`, `FT/FGA`, `eFG%`, `TS%`))
+```
 
+The best stats to predict 3PA will be selected using backwards elmination using BIC (Bayesian Information Criterion).  
+```{r, include=FALSE}
 best_subsets_3s <- regsubsets(`3PA`~., df_pred3, method="backward")   
-best_summary_3s <- summary(best_subsets_3s) 
+best_summary_3s <- summary(best_subsets_3s)
+```
 
-plot(best_summary_3s$bic, xlab = "Number of Variables", ylab = "BIC", type = "b") 
+```{r}
+plot(best_summary_3s$bic, 
+     main="5 Stats Should be Used to Predict 3PA",
+     xlab = "Number of Variables", 
+     ylab = "BIC", 
+     type = "b"
+) 
 ```
 
 ## Selecting the Best 5 Variables 
-```{r}
+
+Based on the variable selection process, these 5 statistics were evaluated to be the most important for predicting the number of threes attempted by a team in a game: TRB (total rebounds), STL (steals), TOV (turnovers), PTS (points), ORB% (offensive rebound percentage).  
+```{r, include=FALSE}
 best_coefs <- coef(best_subsets_3s, 5) 
 coef_names <- names(best_coefs) 
 coef_names 
 ```
 ## Creating the Model 
+
+The fitted model was created using least-squares linear regression. 
+
+$$ \widehat{3PA} = -458.13 + 4.21TRB + 1.49STL + 4.97TOV + 2.59PTS -2.89ORB\% $$
+
 ```{r}
 model_3s <- lm(`3PA` ~ TRB+STL+TOV+PTS+`ORB%` , df_pred3) 
-fit_3PA <-fitted(model_3s)
-
-## Will fix titles later 
-plot(seq(length(df_3s$Season)), df_3s$`3PA`) 
-lines(seq(length(df_3s$Season)), fit_3PA)
+# summary(model_3s) 
 ```
 
 
+```{r}
+fit_3PA <-rev(fitted(model_3s))
 
+plot(seq(length(df_3s$Season)), rev(df_3s$`3PA`),
+     main="Model Prediction Appear to be Very Accurate",
+     xlab="Season",
+     ylab="3-Pt Attempts Per Game"
+     ) 
+lines(seq(length(df_3s$Season)), fit_3PA)
+```
 
+ANOVA Table 
+
+```{r include=FALSE}
+anova(model_3s)
+```
+
+```{r}
+SS_reg = 921.71+2454.16+468.44+159.17+524.30 
+SS_res = 20.23 
+SS_tot = SS_reg+SS_res 
+DF = c(5, 39, 5+39)
+SS = c(SS_reg, SS_res, SS_tot) 
+MS = SS/DF 
+
+ANOVA_table = tibble(
+  Label = c("Regression", "Residual", "Total"), 
+  DF, SS, MS 
+)
+ANOVA_table
+```
 
 
 ----------------------------------------------------------------------------------------------------------------------------------------
 ## Why are there more 3 point shots attempted?
-Is the reason teams are taking more 3 point attempts because teams are defending better making driving tothe rim and scoring even harder as the league progresses? 
+Is the reason teams are taking more 3 point attempts because teams are defending better making driving to the rim and scoring even harder as the league progresses? 
 In order to determine if this is true we'll regress various common defensive stats taken league-wide to see if better defence leads to more 3 point attemots taken.
 
 ```{r}
@@ -201,12 +269,20 @@ confint(lm_defence, level=0.95)
 ```
 
 ```{r}
-plot(league_df$STL, league_df$`3PA`)
+plot(league_df$STL, league_df$`3PA`, 
+       main="More Steals Lead to Fewer Threes Attempted",
+       xlab="Steals Per Game",
+       ylab="3PA Per Game"
+)
 abline(lm(`3PA`~STL, league_df))
 ```
 
 ```{r}
-plot(league_df$TOV, league_df$`3PA`)
+plot(league_df$TOV, league_df$`3PA`, 
+       main="More Turnovers Coincide with Fewer Threes Attempted",
+       xlab="Turnovers Per Game",
+       ylab="3PA Per Game"
+)
 abline(lm(`3PA`~TOV, league_df))
 ```
 
@@ -240,4 +316,18 @@ plot(league_df$DRB, league_df$ORB)
 abline(lm(ORB~DRB, league_df))
 ```
 
-Based on these results we can say with reasonable confidence that a relationship exists between the number of defensive rebounds vs the number of offensive rebounds. Where as the number of defensive rebounds increases, the number of offensive rebounds decreases.
+Based on these results we can say with reasonable confidence that a relationship exists between the number of defensive rebounds vs the number of offensive rebounds. Where as the number of defensive rebounds increases, the number of offensive rebounds decreases. 
+
+# Conclusions 
+
+The number of threes attempts has been steadily increasing in almost every season since the inception of the three point line in 1979. We were able to determine several reason why this may be the case, including changes in related statistics and the impact of defense. Using what we discovered in the analysis we can now have a clear hypothesis for why the number of threes has skyrocketed throughout the decades:
+
+Attempting more threes makes guarding more difficult for defenses, leading to lower block and steal numbers. While the number of offensive rebounds decreases when having a spaced-out offense, scoring still increases when attempting more threes. Attempting more threes also appears to be less risky and lead to fewer turnovers, which can be costly for teams. To summarise, it appears that shooting more threes makes offenses better and defenses worse, which incentivises to take more of them. 
+
+
+
+
+
+
+
+
