@@ -1,0 +1,414 @@
+---
+title: "Regression Analysis on NBA Threes"
+author: "Brandon Chan, Brayden Van De Wynckel"
+date: "2024-11-13"
+output:
+  html_document: 
+    df_print: kable 
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(tibble.print_min = 4, tibble.print_max = 10)
+# install.packages("MASS")
+# install.packages("leaps")
+# install.packages("DT")
+# install.packages("pander")
+# remove.packages("htmltools")
+# install.packages("htmltools")
+library(MASS)
+library(tidyverse)
+library(leaps) 
+library(knitr) 
+library(pander) 
+library(DT)
+select <- dplyr::select 
+```
+
+## Index
+
+```{r}
+index <- tibble(
+  Order = seq(1:18),
+  Item = c("Objective", "Data Description", "Testing the Claim that Players Attempts More Threes", "Plotting Changes in 3-Pointers Made", "Stat Selection to Predict Threes Attempted", "Selecting the Best 5 Variables", "Model with the 5 Best Predictors", "Analyzing the Model on the Train Set", "ANOVA Table and F-test", "Analyzing the Model Predictions on the Test Set", "Is Defense Impacting the Number of 3 Point Shots Attempted?", "3PA Vs. Box-Score Defensive Stats", "Defense Model", "Box-Cox Transformation", "Cook’s Distance", "The Adjusted Defense Model", "Rebounding and Threes Attempted", "Conclusions")
+)
+index
+```
+
+## 1. Objective
+
+Many older NBA fans like to make claims about how the league was different back in their day. They often criticize today's game for the high frequency of threes attempted. Many speculate why this is the case, but clear explanations are not often provided. The aim of this analysis is to see how the number of threes attempted has changed over the years, and why these changes have taken place.
+
+## 2. Data Description
+
+The data is from basketballreference.com and includes all seasons in NBA history. This particular dataset includes many common stats (ex. points, offensive rating), taken as the league average of per-game stats of <b>teams</b> for a given season. For example the PTS stat in the 2023-24 season represents that average points per game scored by a team in a single game.
+
+```{r}
+league_df <- read_csv("https://raw.githubusercontent.com/BrandonYChan/Regression-Analysis-NBA/refs/heads/main/pergame_league.csv", show_col_types = FALSE) %>%
+  filter(Season >= "1950-51") %>% 
+  select(-c(Rk, Lg))
+datatable(league_df, options=list(autoWidth=TRUE), width="80%")  
+```
+
+## 3. Testing the Claim that Players Attempts More Threes
+
+We are going to start by evaluating the claim that players shoot more threes in today's game than in past decades. This can be expressed more formally with a hypothesis test.
+
+Claim: Players are shooting more threes in recent times than in the past. We will take the mean number of threes attempted in the 2020's and compare it to the mean number of threes in the 1990's as samples, and treat all decades with the three point line existed as the population. 
+
+$H_0$: $M_{2020s}$ = ($M_{1990s}$ 
+
+$H_A$: $M_{2020s}$ > ($M_{1990s}$ 
+
+$$t_{obs} = \frac{(M_{2020s} - M_{1990s})-0)}{s_p(\frac{1}{n1}+ \frac{1}{n2})}$$
+
+$$t_{obs} = \frac{12.56 - 4.25}{3.744\sqrt{\frac{1}{5} + \frac{1}{25}}}$$
+
+$$t_{obs} = 10.98176$$
+
+At 95% significance: $t_{0.05, 28} = 2.131847$ $$ t_{obs} > t_{\alpha, n1+n2-2} $$ So we reject the null hypothesis: Players do shoot more threes in the current decade than in the past.
+
+```{r}
+# Group by decade 
+df_3s <- league_df %>% 
+  mutate(Decade = paste(substr(Season, 6, 6), "0's", sep=""))
+
+# Get mean 3's for each decade 
+decade3s <- df_3s %>% 
+  group_by(Decade) %>% 
+  filter(!(Decade %in% c("50's", "60's", "70's"))) %>% 
+  summarise(Mean3s = mean(`3PA`)) %>% 
+  arrange(desc(Mean3s)) 
+decade3s 
+
+mean3s_2020s <- decade3s %>% 
+  filter(Decade=="20's") %>% 
+  select(Mean3s) %>% 
+  pull() 
+
+means3s_1990s <- decade3s %>% 
+  filter(Decade=="90's") %>% 
+  select(Mean3s) %>% 
+  pull() 
+
+mu <- mean(decade3s$Mean3s)
+
+# Pooled t-test 
+s1 <- df_3s %>% 
+  filter(Decade=="20's") %>% 
+  summarise(sd(`3PA`)) %>% 
+  pull()
+  
+s2 <- df_3s %>% 
+  filter(Decade=="90's") %>% 
+  summarise(sd(`3PA`)) %>% 
+  pull()  
+
+n1 <- df_3s %>% 
+  filter(Decade=="20's") %>% 
+  select(Decade) %>% 
+  count() %>% 
+  pull() 
+n2 <- df_3s %>% 
+  filter(Decade=="90's") %>% 
+  select(Decade) %>% 
+  count() %>% 
+  pull() 
+
+s_pooled <- sqrt(((n1-1)*s1^2 + (n2-1)*s2^2) / (n1+n2-2))
+
+# Observed test statistic 
+t_obs <- ((mean3s_2020s - means3s_1990s)-0)/(s_pooled * sqrt(1/n1+1/n2)) 
+
+# Evaluated at 95% significance 
+t_alpha <- qt(0.05, n1+n2-2, lower.tail = FALSE)
+```
+
+## 4. Plotting Changes in 3-Pointers Made
+
+The evidence strongly suggests that players take more 3s than in the past. We verify this with a visualization:
+
+```{r}
+df_3s <- league_df %>% 
+  filter(!is.na(Pace), !is.na(`3PA`), !is.na(`3P%`)) %>% 
+  select(Season,`3PA`, `3P%`) 
+
+df_3s %>% 
+  ggplot(aes(Season, `3PA`, group=1)) + 
+  geom_point() + 
+  geom_line(aes(color='orange'), show.legend = FALSE) +
+  scale_x_discrete(breaks=c("1979-80", "1989-90", "1999-00", "2009-10", "2019-20")) + 
+  ggtitle("3-Pointers Made Per-Game Increases Almost Every Season") + 
+  labs(caption = "3-pt line distance decreased from 1994 to 1997") +
+  theme(panel.background = element_rect(color="orange"))
+
+```
+
+Disregarding the period when the three point line was moved, players take more threes in almost every season since the three point line was added in 1979. This leads to the question; why are players taking more threes? We will attempt to solve this question by finding what stats are contributing to changes in threes made.   
+
+## 5. Stat Selection to Predict Threes Attempted
+
+The following variables/stats will be removed due to linear dependencies or irrelevance to the model: Season, Ht, 3P, 3P%, FG, FGA, FG%, FT/FGA, eFG%, TS%.
+
+```{r}
+# Remove variables with direct linear dependencies 
+df_pred3 <- league_df %>% 
+  select(-c(Season, Ht, `3P`, `3P%`, FG, FGA, `FG%`, `FT/FGA`, `eFG%`, `TS%`))
+```
+
+The best stats to predict 3PA will be selected using backwards elimination and BIC (Bayesian Information Criterion).
+
+```{r, include=FALSE}
+best_subsets_3s <- regsubsets(`3PA`~., df_pred3, method="backward")   
+best_summary_3s <- summary(best_subsets_3s)
+```
+
+```{r}
+plot(best_summary_3s$bic, 
+     main="5 Stats Should be Used to Predict 3PA",
+     xlab = "Number of Variables", 
+     ylab = "BIC", 
+     type = "b"
+) 
+```
+
+## 6.  Selecting the Best 5 Predictors
+
+Based on the variable selection process, the following 5 statistics were evaluated to be the most important for predicting the number of threes attempted by a team in a game: TRB (total rebounds), STL (steals), TOV (turnovers), PTS (points), ORB% (offensive rebound percentage).
+
+```{r, include=FALSE}
+best_coefs <- coef(best_subsets_3s, 5) 
+coef_names <- names(best_coefs) 
+coef_names 
+```
+
+## 7. Model with the 5 Best Predictors 
+
+The fitted model was fitted using least-squares linear regression.
+
+$$ \widehat{3PA} = -465.2109 + 4.1175TRB + 2.1830STL + 5.0996TOV + 2.6476PTS -2.9867ORB\% $$
+
+The linear model was trained on the train set after splitting the data into 70% training data and 30% testing data.
+
+```{r}
+set.seed(1)
+# Only include seasons where the 3-point line exists 
+df_3line <- league_df %>% filter(!is.na(`3PA`))
+
+# Split into train and test sets 
+train_indicies <- sample(1:nrow(df_3line), 0.7*nrow(df_3s)) 
+train_top5 <- df_3line[train_indicies,]
+test_top5 <- df_3line[-train_indicies,]  
+```
+
+```{r, include=FALSE}
+# Create model trained on train set 
+model_top5 <- lm(`3PA` ~ TRB+STL+TOV+PTS+`ORB%` , train_top5) 
+summary(model_top5)
+```
+
+## 8. Analyzing the Model on the Train Set
+
+<b> Descriptive Statistics </b>
+
+Adjusted R-squared: 0.9955
+
+Residual standard error: 0.7017 on 25 degrees of freedom
+
+## 9. ANOVA Table and F-test 
+
+```{r include=FALSE}
+anova(model_top5) 
+```
+
+```{r}
+SS_reg = 832.2294 + 2314.7249 + 335.8212 + 35.3356 + 380.5590
+SS_res = 11.63
+SS_tot = SS_reg+SS_res 
+DF = c(5, 25, 5+25)
+SS = c(SS_reg, SS_res, SS_tot) 
+MS = SS/DF 
+F = c(round(MS[1]/MS[2],2), "", "")
+
+ANOVA_table = tibble(
+  Label = c("Regression", "Residual", "Total"), 
+  DF, SS, MS, F
+)
+ANOVA_table
+```
+
+F-test for the significance of the regression model at significance level $\alpha=0.05$:
+
+$$F_{obs} = \frac{MS_{reg}}{MS_{res}} = 1676.13$$
+
+$$F_{0.05, p, n-(p+1)} = F_{0.05, 5, 25} = 2.602987$$
+
+Clearly $F_{obs} > F_{0.05, 5, 25}$ by a significant margin. Therefore we can assume that the model predictors are significant and the coefficients are not 0.
+
+
+```{r, include=FALSE}
+qf(0.05, 5, 25, lower.tail=FALSE)
+```
+
+## 10. Analyzing the Model Predictions on the Test Set
+
+<b> Descriptive Statistics </b>
+
+$R^2$ = 0.9931568
+
+RMSE = 0.7669981
+
+Here are some examples of predicted threes attempted compared to the actual volume attempted during NBA seasons:
+
+```{r, include=TRUE}
+# Test model on test set 
+test_3PA <- test_top5$`3PA`
+pred_3PA <- predict(model_top5, test_top5) 
+
+# Evaluating the model 
+SSres <- sum((test_3PA-pred_3PA)^2) 
+SSreg <- sum((pred_3PA-mean(test_3PA))^2) 
+Rsq <- SSreg/(SSreg+SSres) 
+RMSE <- sqrt(mean((test_3PA-pred_3PA)^2))
+
+df_comparison <- data.frame(True3PA = test_3PA, Predicted3PA = pred_3PA)
+head(df_comparison) 
+```
+
+------------------------------------------------------------------------
+
+## 11. Is Defense Impacting the Number of 3 Point Shots Attempted?
+
+Based on the variable selection process in the last step, defensive stats appear to be effective in predicting threes attempted. Could this due to defensive strategies that are limiting drives to the basket and forcing more threes? In order to determine if this is true, we will regress various common defensive stats to see if better defense leads to more 3 point attempts taken. 
+
+## 12. 3PA Vs. Box-Score Defensive Stats 
+
+We start by checking the relationship between threes attempted and defensive box-score stats. 
+
+
+<b> Blocks and Threes Attempted </b> 
+
+```{r}
+plot(league_df$STL, league_df$`3PA`, 
+       main="More Steals Coincide with Fewer Threes Attempted",
+       xlab="Steals Per Game",
+       ylab="3PA Per Game"
+)
+abline(lm(`3PA`~STL, league_df))
+```
+
+<b> Steals and Threes Attempted </b> 
+
+```{r}
+plot(league_df$BLK, league_df$`3PA`, 
+       main="More Blocks Coincide with Fewer Threes Attempted",
+       xlab="Blocks Per Game",
+       ylab="3PA Per Game"
+)
+abline(lm(`3PA`~BLK, league_df))
+```
+
+## 13. Defense Model 
+
+There clearly appears to be some relationship between defensive stats and the number of threes attempted. We wanted to analyze this relationship further, so we formed a model with defensive stats using steals, turnovers, blocks, and defensive rebounds are predictors for three attempted. The model formula is a follows: 
+
+$$ \widehat{3PA} = 6.5024  + 0.6960STL - 3.08078TOV - 6.0463BLK + 2.6883DRB $$ 
+
+The model has an adjusted $R^2$ value of 0.8961. It's not bad, but it might improve with a couple of adjustments. 
+
+```{r, include=FALSE}
+# Original Model 
+lm_defence <- lm(`3PA`~STL+TOV+BLK+DRB, df_3line)
+summary(lm_defence)
+```
+
+## 14. Box-Cox Transformation 
+The first adjustment applied is the Box-Cox transformation. Despite using the Box-Cox transformation on the model with the optimal lambda value of 0.55, the model's adjusted $R^2$ stayed the same. 
+
+
+```{r, include=FALSE}
+# Box-Cox Transform  
+boxcox_transform <- boxcox(lm_defence) 
+lambda <- boxcox_transform$x[which.max(boxcox_transform$y)] 
+
+if(lambda == 0){
+  df_3line$transformed_3PA <- log(df_3line$`3PA`) 
+} else{
+  df_3line$transformed_3PA <- (df_3line$`3PA` - 1) / lambda 
+}
+
+# Transformed Model 
+lm_defence_transformed <- lm(transformed_3PA~STL+TOV+BLK+DRB, df_3line) 
+
+summary(lm_defence_transformed) 
+```
+
+$$ \widehat{3PA} = 10.0878   + 1.2760STL - 5.6480TOV - 11.0849BLK + 4.9286DRB $$
+
+## 15. Cook's Distance 
+Another adjustment to potentially improve the model is to check for influential observations that are disproportionately affecting the model. This is checked using Cook's distance. 
+
+```{r}
+cookd <- cooks.distance(lm_defence_transformed)
+plot(cookd, 
+     pch = 20, 
+     main = "Cook's Distance Plot of the Box-Cox Transformed Model", 
+     xlab="Season Indices",
+     ylab="Cook's Distance") 
+
+abline(h = 4/nrow(df_3line), col = "orange")
+```
+
+There are a few influential observations, and the first one is incredibly apparent. The influential observations will be removed to attempt to obtain better results. 
+
+```{r}
+influential_obs <- which(cookd > 4/nrow(df_3line)) 
+df_3line_new <- df_3line[-influential_obs,]
+```
+
+## 16. The Adjusted Defense Model 
+
+```{r, include=FALSE}
+# Transformed Model with Removed Influential Observations  
+lm_defence_final <- lm(transformed_3PA~STL+TOV+BLK+DRB, df_3line_new) 
+summary(lm_defence_final)
+```
+
+Model formed using defensive stats after applying the Box-Cox transformation and removing influential observations: $$ \widehat{3PA} = -43.8348   + 2.2741STL - 3.7727TOV - 12.9361BLK + 5.6905DRB $$
+
+After removing influential observations, adjusted $R^2$ increases to 0.9264. 
+
+Based on the model, defensive metrics are effective in predicting the number of threes attempted. It appears that as defensive stats improve, 3 point shot attempts fall. This may be because teams are not comfortable taking deep shots when their players are guarded closely and are being disrupted by defensive players. 
+
+## 17. Rebounding and Threes Attempted 
+The relationship between defensive rebounding and threes attempted could just be attributed to a team's positioning in a spaced-out offense. When a team is playing a 5-out offense with all offensive players looking to shoot threes, the defence is more likely to recover missed shots since they are closer to the rim. 
+
+We verify this by regressing 3 point shot attempts against offensive and defensive rebounds. 
+
+```{r, warning=FALSE}
+league_df %>% 
+  filter(!is.na(`3PA`)) %>% 
+  ggplot(aes(x=`3PA`, y=ORB, group=1)) + 
+  geom_point() + 
+  geom_smooth(color='orange', method="lm", formula=y~x) + 
+  ggtitle("Attempting More Threes Appears to Cause Fewer Offensive Rebounds") + 
+  theme(panel.background = element_rect(color="orange"),
+        legend.position = "bottom")
+```
+```{r, warning=FALSE}
+league_df %>% 
+  filter(!is.na(`3PA`)) %>% 
+  ggplot(aes(x=`3PA`, y=DRB, group=1)) + 
+  geom_point() +
+  geom_smooth(color='orange', method="lm", formula=y~x) +  
+  ggtitle("Attempting More Threes Appears to Create more Defensive Rebounds") + 
+  theme(panel.background = element_rect(color="orange"),
+        legend.position = "bottom")
+```
+
+## 18. Conclusions
+
+The number of threes attempts has been steadily increasing in almost every season since the inception of the three point line in 1979. We were able to determine several reason why this may be the case, including changes in related statistics and the impact of defense. Using what we discovered in the analysis we can now have a clear hypothesis for why the number of threes has skyrocketed throughout the decades:
+
+Attempting more threes makes guarding more difficult for defenses, leading to lower block and steal numbers. While the number of offensive rebounds decreases when having a spaced-out offense, scoring still increases when attempting more threes. Attempting more threes also appears to be less risky and lead to fewer turnovers, which can be costly for teams. To summarise, it appears that shooting more threes makes offenses better and defenses worse, which provides incentive for teams to take more of them.
